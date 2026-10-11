@@ -4,6 +4,22 @@ import OpenAI from "openai";
 
 const app = express();
 const port = process.env.PORT || 3000;
+const appToken = process.env.APP_ACCESS_TOKEN;
+
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.path === "/") {
+    return next();
+  }
+
+  if (
+    !appToken ||
+    req.headers.authorization !== `Bearer ${appToken}`
+  ) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),

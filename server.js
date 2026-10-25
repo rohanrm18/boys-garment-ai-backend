@@ -1,34 +1,37 @@
 import express from "express";
 import multer from "multer";
-import OpenAI from "openai";
+import sharp from "sharp";
 
 const app = express();
 const port = process.env.PORT || 3000;
 const appToken = process.env.APP_ACCESS_TOKEN;
+
+const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+
+const model = "@cf/black-forest-labs/flux-2-klein-4b";
 
 app.use((req, res, next) => {
   if (req.method === "GET" && req.path === "/") {
     return next();
   }
 
-  if (
-    !appToken ||
-    req.headers.authorization !== `Bearer ${appToken}`
-  ) {
+  if (!appToken ||
+      req.headers.authorization !== `Bearer ${appToken}`) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-
   next();
 });
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, callback) => {
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
-      return callback(new Error("Upload a JPG, PNG, or WebP image."));
+  fileFilter: (_req, file, cb) => {
+    if (!["image/jpeg", "image/png", "image/webp"]
+      .includes(file.mimetype)) {
+      return cb(new Error("Unsupported image format."));
     }
-    callback(null, true);
+    cb(null, true);
   }
 });
 
@@ -38,49 +41,109 @@ app.get("/", (_req, res) => {
 
 app.post("/generate", upload.single("image"), async (req, res) => {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "Server API key is not configured." });
+    if (!accountId || !apiToken) {
+      return res.status(500).json({
+        error: "Cloudflare credentials are missing."
+      });
     }
 
     if (!req.file) {
-      return res.status(400).json({ error: "Please upload a garment photo." });
+      return res.status(400).json({
+        error: "Please upload a garment photo."
+      });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const imageFile = new File(
-      [req.file.buffer],
-      req.file.originalname || "garment.png",
-      { type: req.file.mimetype }
-    );
+    const referenceImage = await sharp(req.file.buffer)
+      .rotate()
+      .resize(480, 480, {
+        fit: "inside",
+        withoutEnlargement: true
+      })
+      .jpeg({ quality: 85 })
+      .toBuffer();
 
-    const result = await openai.images.edit({
-      model: "gpt-image-1",
-      image: imageFile,
-      prompt:
-        "Create a photorealistic premium boys fashion catalogue photo using the uploaded garment as the exact clothing reference. Preserve the garment's colors, embroidery, patterns, buttons, trims, fabric appearance, and design as faithfully as possible. Show a child model around 5 years old wearing the outfit naturally, full body, with a simple clean white studio background, soft professional lighting, realistic proportions, and sharp clothing details. Do not add logos or text."
+    const prompt = `
+Create ONE photorealistic premium boys ethnic-wear
+e-commerce catalogue photograph.
+
+Use the attached image as the clothing reference.
+Dress a fictional Indian boy approximately 5 years old
+in the exact garment shown.
+
+Preserve the garment's original colours, fabric,
+embroidery, patterns, collar, buttons, trims,
+sleeves and silhouette as faithfully as possible.
+
+Show the boy standing naturally, directly facing
+the camera, full body visible including footwear.
+Clean white studio background, professional soft
+lighting, realistic skin and fabric texture.
+
+One boy, one photograph, no collage, no text,
+no watermark, no additional garments.
+`;
+
+    const form = new FormData();
+    form.append("prompt", prompt);
+    form.append(
+      "input_image_0",
+      new Blob([referenceImage], { type: "image/jpeg" }),
+      "garment.jpg"
+    );
+    form.append("width", "1024");
+    form.append("height", "1024");
+
+    const endpoint =
+      `https://api.cloudflare.com/client/v4/accounts/` +
+      `${accountId}/ai/run/${model}`;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`
+      },
+      body: form,
+      signal: AbortSignal.timeout(150000)
     });
 
-    const imageBase64 = result.data?.[0]?.b64_json;
-    if (!imageBase64) {
-      return res.status(502).json({ error: "The image service returned no image." });
+    const result = await response.json();
+
+    if (!response.ok || result.success === false) {
+      console.error("Cloudflare error:", response.status,
+        JSON.stringify(result.errors || result));
+      return res.status(502).json({
+        error: `Cloudflare generation failed (${response.status}).`
+      });
     }
 
-    res.json({ image: imageBase64, mimeType: "image/png" });
+    const imageBase64 = result.result?.image;
+
+    if (!imageBase64) {
+      console.error("Unexpected Cloudflare response:",
+        JSON.stringify(result).slice(0, 500));
+      return res.status(502).json({
+        error: "Cloudflare returned no image."
+      });
+    }
+
+    res.json({
+      image: imageBase64,
+      mimeType: "image/png"
+    });
+
   } catch (error) {
-    console.error("Image generation failed:", error.message);
+    console.error("Generation error:", error.message);
     res.status(500).json({
-      error: "Image generation failed. Check server logs and API access."
+      error: "Generation failed. Check Render logs."
     });
   }
 });
 
 app.use((error, _req, res, _next) => {
-  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-    return res.status(413).json({ error: "Image must be 10 MB or smaller." });
-  }
-  res.status(400).json({ error: error.message || "Invalid request." });
+  res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400)
+    .json({ error: error.message || "Invalid upload." });
 });
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`Boys Garment AI backend listening on port ${port}`);
+  console.log(`Backend listening on port ${port}`);
 });

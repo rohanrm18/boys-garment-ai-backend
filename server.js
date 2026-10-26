@@ -54,33 +54,90 @@ app.post("/generate", upload.single("image"), async (req, res) => {
     }
 
     const referenceImage = await sharp(req.file.buffer)
-      .rotate()
-      .resize(480, 480, {
-        fit: "inside",
-        withoutEnlargement: true
-      })
-      .jpeg({ quality: 85 })
-      .toBuffer();
+  .rotate()
+  .resize(1024, 1024, {
+    fit: "inside",
+    withoutEnlargement: true
+  })
+  .jpeg({ quality: 95 })
+  .toBuffer();
 
     const prompt = `
-Create ONE photorealistic premium boys ethnic-wear
-e-commerce catalogue photograph.
+TASK: GARMENT-PRESERVING FASHION PHOTOGRAPHY
 
-Use the attached image as the clothing reference.
-Dress a fictional Indian boy approximately 5 years old
-in the exact garment shown.
+Create exactly ONE photorealistic premium Indian boys'
+ethnic-wear e-commerce catalogue photograph.
 
-Preserve the garment's original colours, fabric,
-embroidery, patterns, collar, buttons, trims,
-sleeves and silhouette as faithfully as possible.
+REFERENCE IMAGE:
+The uploaded photograph shows a REAL manufactured garment.
+Treat it as the authoritative product reference, not as
+inspiration for a new design.
 
-Show the boy standing naturally, directly facing
-the camera, full body visible including footwear.
-Clean white studio background, professional soft
-lighting, realistic skin and fabric texture.
+SUBJECT:
+One fictional Indian boy, approximately 5 years old.
+Natural child proportions, realistic face and skin.
+Standing upright, facing directly toward the camera.
+Relaxed arms, natural expression.
 
-One boy, one photograph, no collage, no text,
-no watermark, no additional garments.
+GARMENT FIDELITY — HIGHEST PRIORITY:
+Dress the boy in the EXACT clothing shown in the reference.
+
+Preserve:
+- Exact garment colours and colour combinations.
+- Exact fabric patterns, including motif shapes,
+  orientation, spacing, density and scale.
+- Original embroidery and decorative stitching.
+- Original collar shape, height and trim.
+- Original jacket or waistcoat length and silhouette.
+- Original jacket front opening and hem shape.
+- Original number, position, colour and style of buttons.
+- Original brooch, chain and decorative accessories.
+- Original pocket square, if present.
+- Original kurta length, sleeves and cuffs.
+- Original trousers, including colour, shape and fit.
+- Original fabric texture and sheen.
+
+CRITICAL RESTRICTIONS:
+Do not redesign, reinterpret or simplify the garment.
+Do not replace the original fabric print with a
+similar-looking geometric or floral pattern.
+Do not invent embroidery, buttons or accessories.
+Do not add or remove garment components.
+Do not turn a straight jacket hem into a curved hem.
+Do not alter the garment's colour palette.
+Do not replace the original garment with generic
+Indian festive clothing.
+
+If the reference shows a flat-lay garment,
+convert only its presentation into a realistically
+worn outfit while preserving its visible design.
+
+PHOTOGRAPHY:
+Premium professional fashion catalogue photography.
+Full-body frontal view, head to toe.
+Clean white or very light neutral studio background.
+Soft, even professional studio lighting.
+Accurate textile colour reproduction.
+Sharp garment details and realistic fabric texture.
+Natural shadows and realistic proportions.
+Garment clearly visible without obstruction.
+Leave comfortable space above the head and below the feet.
+
+OUTPUT:
+One boy.
+One complete outfit.
+One photograph.
+No collage.
+No text.
+No watermark.
+No extra garments.
+
+PRIORITY ORDER:
+1. Original garment identity and details.
+2. Accurate colours, patterns and accessories.
+3. Realistic garment fit on the child.
+4. Photographic realism and professional lighting.
+5. Attractive model appearance.
 `;
 
     const form = new FormData();
